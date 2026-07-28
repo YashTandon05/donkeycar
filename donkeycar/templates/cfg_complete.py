@@ -566,6 +566,58 @@ AUG_NOISE_MEAN_RANGE = (0.0, 0.0)
 # Probability that a given training image gets noise added (0..1).
 AUG_NOISE_PROBABILITY = 0.15
 
+# Grayscale augmentation. Converts a training image to grayscale then
+# replicates it back to 3 channels (so the model's input shape doesn't
+# change). Color values can shift a lot across different times of day
+# (white balance, sodium vs LED lighting, sunlight vs shade), so training
+# on some grayscale samples discourages the model from relying on color
+# and pushes it toward contrast/structure (lane edges, track boundaries)
+# instead. Enable it by adding 'GRAYSCALE' to the AUGMENTATIONS list.
+#
+# NOTE: like all AUGMENTATIONS, this only ever runs during training - the
+# deployed car still sees full color at inference. If you want the live
+# camera feed to also always be grayscale (a stronger, permanent version
+# of the same idea, guaranteeing the model never sees color at all), that
+# needs to be a TRANSFORMATIONS entry instead (e.g. ['RGB2GRAY',
+# 'GRAY2RGB']), since only TRANSFORMATIONS run at inference too.
+#
+# Probability that a given training image is converted to grayscale (0..1).
+AUG_GRAYSCALE_PROBABILITY = 0.5
+# Method used for the grayscale conversion. 'weighted_average' (0.299R +
+# 0.587G + 0.114B) gives the most realistic/perceptual result. Other
+# options: 'from_lab', 'desaturation', 'average', 'max', 'pca'.
+AUG_GRAYSCALE_METHOD = 'weighted_average'
+
+# High-pass filter augmentation. Subtracts a blurred ("low-frequency")
+# version of the image from itself, so flat/smooth regions (overall color
+# and broad brightness - the things that change a lot across times of
+# day) collapse toward mid-gray, while edges and texture (lane lines,
+# track boundaries - things that stay comparatively stable across
+# lighting) are emphasized. This is a real high-pass filter, not a mild
+# sharpening effect: at AUG_HIGHPASS_BLEND_RANGE near 0 the result looks
+# like edges on a flat gray background. Enable it by adding 'HIGHPASS' to
+# the AUGMENTATIONS list.
+#
+# Related, already-available alternative: TRANSFORMATIONS supports
+# 'CANNY' (binary Canny edge detection, see CANNY_LOW_THRESHOLD /
+# CANNY_HIGH_THRESHOLD / CANNY_APERTURE below), which is a more aggressive,
+# always-on (train + inference) edge-only option with no new code needed -
+# worth comparing against HIGHPASS if you want a stronger effect.
+#
+# Probability that a given training image gets the high-pass filter (0..1).
+AUG_HIGHPASS_PROBABILITY = 0.5
+# Min/max Gaussian blur sigma used to compute the "low-frequency" version
+# that gets subtracted. Higher = coarser edges/more low-frequency content
+# removed.
+AUG_HIGHPASS_BLUR_SIGMA_RANGE = (3.0, 8.0)
+# Min/max scaling applied to the high-pass result before re-centering at
+# mid-gray. Higher = more exaggerated edges.
+AUG_HIGHPASS_STRENGTH_RANGE = (0.7, 1.3)
+# Min/max fraction of the original image blended back in on top of the
+# high-pass result. 0 = pure high-pass ("edges on gray"), higher = a
+# milder, more sharpening-like effect that still shows color/brightness.
+AUG_HIGHPASS_BLEND_RANGE = (0.0, 0.15)
+
 # Shadow augmentation. Adds randomly shaped, randomly placed partial
 # shadows to training images (e.g. tree/building shadows crossing the
 # lane), so the model learns stable road/lane features instead of
@@ -620,6 +672,8 @@ AUG_NOISE_STD_RANGE = (0.05, 0.15)
 #   - SHADOW      - add random partial shadows to simulate changing sunlight
 #   - GAMMA       - nonlinear brightening/darkening, simulates glare and low light
 #   - NOISE       - add sensor grain/noise, simulates low-light camera footage
+#   - GRAYSCALE   - drop color/hue, train on luminance+contrast only some of the time
+#   - HIGHPASS    - subtract a blurred copy of the image to emphasize edges/structure over color
 #
 # Example AUGMENTATIONS profiles - copy the list (and any of the AUG_*
 # overrides mentioned) into your myconfig.py. These are starting points,
@@ -633,6 +687,14 @@ AUG_NOISE_STD_RANGE = (0.05, 0.15)
 #     shadows, nonlinear day<->night lighting changes, and low-light
 #     sensor grain together. Consider widening AUG_GAMMA_RANGE (e.g. to
 #     (60, 160)) so it covers stronger night darkening and midday glare.
+#   - contrast_focus:  ['GRAYSCALE', 'HIGHPASS', 'GAMMA', 'NOISE', 'SHADOW']
+#     Leans further into color-invariance than all_conditions: on top of
+#     the lighting-change augmentations, GRAYSCALE and HIGHPASS regularly
+#     strip color and/or flat brightness so the model is pushed toward
+#     relying on contrast/edges/structure (lane lines, track boundaries)
+#     rather than color or absolute brightness values, both of which can
+#     vary a lot across times of day. Try this if all_conditions still
+#     seems to rely too much on color-specific cues.
 #
 # - Transformations are changes to the image that apply both in
 #   training and at inference.  They are always applied and in

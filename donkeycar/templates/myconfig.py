@@ -16,3 +16,16 @@
 # AUG_GAMMA_RANGE = (60, 160)
 # AUG_NOISE_PROBABILITY = 0.3
 
+# Alternative: "contrast_focus" profile - leans further into color-
+# invariance by regularly dropping color (GRAYSCALE) and/or de-emphasizing
+# flat brightness in favor of edges/structure (HIGHPASS), on top of the
+# same lighting-change augmentations. Try this if all_conditions still
+# seems to rely too much on color-specific cues. Note both GRAYSCALE and
+# HIGHPASS only run during training (see cfg_complete.py for the
+# TRANSFORMATIONS alternative if you want the live camera feed to also
+# always be grayscale/edge-only).
+# AUGMENTATIONS = ['GRAYSCALE', 'HIGHPASS', 'GAMMA', 'NOISE', 'SHADOW']
+# AUG_GAMMA_RANGE = (60, 160)
+# AUG_GRAYSCALE_PROBABILITY = 0.5
+# AUG_HIGHPASS_PROBABILITY = 0.5
+

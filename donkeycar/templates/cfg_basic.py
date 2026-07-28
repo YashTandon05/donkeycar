@@ -131,6 +131,19 @@ AUG_GAMMA_PROBABILITY = 0.5
 AUG_NOISE_STD_RANGE = (0.05, 0.15)
 AUG_NOISE_MEAN_RANGE = (0.0, 0.0)
 AUG_NOISE_PROBABILITY = 0.3
+# Settings for grayscale (drops color, keeps 3 channels), use 'GRAYSCALE'
+# in AUGMENTATIONS. Training-time only - see cfg_complete.py for the full
+# explanation, including the TRANSFORMATIONS alternative if you want this
+# to also apply at inference.
+AUG_GRAYSCALE_PROBABILITY = 0.5
+AUG_GRAYSCALE_METHOD = 'weighted_average'
+# Settings for the high-pass filter (emphasizes edges/structure, de-
+# emphasizes color and flat brightness), use 'HIGHPASS' in AUGMENTATIONS.
+# See cfg_complete.py for the full explanation of each setting.
+AUG_HIGHPASS_PROBABILITY = 0.5
+AUG_HIGHPASS_BLUR_SIGMA_RANGE = (3.0, 8.0)
+AUG_HIGHPASS_STRENGTH_RANGE = (0.7, 1.3)
+AUG_HIGHPASS_BLEND_RANGE = (0.0, 0.15)
 # Number of pixels to crop, requires 'CROP' in TRANSFORMATIONS to be set
 ROI_CROP_TOP = 45
 ROI_CROP_BOTTOM = 0

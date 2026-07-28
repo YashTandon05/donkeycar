@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Static side-by-side preview tool for the DonkeyCar lighting augmentations
-(GAMMA, NOISE, improved BRIGHTNESS, existing SHADOW, and the combined
-"All Conditions" profile).
+(GAMMA, NOISE, GRAYSCALE, improved BRIGHTNESS, existing SHADOW, and the
+combined "All Conditions" profile).
 
 This is a review/inspection tool only:
   - It does not start a server or web app.
@@ -79,10 +79,14 @@ SETTINGS = {
     'AUG_SHADOW_DIMENSION': 5,
     'AUG_SHADOW_ROI': (0.0, 0.3, 1.0, 1.0),
     'AUG_SHADOW_BLUR_KSIZE': 21,
+    'AUG_GRAYSCALE_METHOD': 'weighted_average',
+    'AUG_HIGHPASS_BLUR_SIGMA_RANGE': (3.0, 8.0),
+    'AUG_HIGHPASS_STRENGTH_RANGE': (0.7, 1.3),
+    'AUG_HIGHPASS_BLEND_RANGE': (0.0, 0.15),
 }
 
-COLUMNS = ['Original', 'Brightness', 'Gamma', 'Shadow', 'Noise',
-          'All Conditions']
+COLUMNS = ['Original', 'Brightness', 'Gamma', 'Shadow', 'Noise', 'Grayscale',
+          'High Pass', 'All Conditions']
 
 ALL_CONDITIONS_LIST = ['BRIGHTNESS', 'BLUR', 'SHADOW', 'GAMMA', 'NOISE']
 
@@ -94,6 +98,8 @@ def build_config(aug_list):
     cfg.AUG_GAMMA_PROBABILITY = 1.0
     cfg.AUG_NOISE_PROBABILITY = 1.0
     cfg.AUG_SHADOW_PROBABILITY = 1.0
+    cfg.AUG_GRAYSCALE_PROBABILITY = 1.0
+    cfg.AUG_HIGHPASS_PROBABILITY = 1.0
     return cfg
 
 
@@ -193,6 +199,8 @@ def build_grid(image_path, out_path):
         'Gamma': apply_single('GAMMA', orig),
         'Shadow': apply_single('SHADOW', orig),
         'Noise': apply_single('NOISE', orig),
+        'Grayscale': apply_single('GRAYSCALE', orig),
+        'High Pass': apply_single('HIGHPASS', orig),
         'All Conditions': apply_all_conditions(orig),
     }
 
@@ -218,7 +226,8 @@ def main():
     parser = argparse.ArgumentParser(
         description='Generate static side-by-side PNG previews of the '
                      'DonkeyCar lighting augmentations (Brightness, Gamma, '
-                     'Shadow, Noise, All Conditions) on real tub images.')
+                     'Shadow, Noise, Grayscale, High Pass, All Conditions) '
+                     'on real tub images.')
     parser.add_argument('--data', required=True,
                         help='Path to a DonkeyCar tub folder (containing '
                              'an images/ subfolder) or a plain folder of '

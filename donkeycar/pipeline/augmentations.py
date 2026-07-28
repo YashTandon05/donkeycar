@@ -4,7 +4,7 @@ import logging
 import albumentations as A
 import cv2
 import numpy as np
-from albumentations import GaussianBlur, RandomGamma, GaussNoise
+from albumentations import GaussianBlur, RandomGamma, GaussNoise, ToGray
 from albumentations.augmentations import RandomBrightnessContrast
 from albumentations.core.transforms_interface import ImageOnlyTransform
 
@@ -87,6 +87,63 @@ class RandomShadow(ImageOnlyTransform):
                 'shadow_roi', 'blur_ksize')
 
 
+class RandomHighPass(ImageOnlyTransform):
+    """ Applies a high-pass filter: subtracts a blurred ("low-frequency")
+        version of the image from the original, so smooth regions (overall
+        color, broad brightness gradients - the things that change a lot
+        between different times of day) collapse toward flat mid-gray,
+        while edges and texture (lane lines, track boundaries - the things
+        that stay comparatively stable across lighting) stand out. This is
+        a genuine high-pass filter (image minus its own low-pass/blurred
+        version), not a mild sharpening/unsharp-mask effect - a fully
+        high-pass image with no original blended back in looks like edges
+        on a flat gray background, since flat/low-frequency content is
+        removed almost entirely regardless of whether it was originally
+        bright, dark, or brightly colored.
+
+        blend_range controls how much of the original image is mixed back
+        in on top of the high-pass result (0 = pure high-pass "edges on
+        gray", higher = a more subtle edge-enhanced version of the
+        original), so this can range from a strong "structure only" effect
+        to a mild sharpening-like effect depending on how it's tuned. """
+
+    def __init__(self,
+                blur_sigma_range=(3.0, 8.0),
+                strength_range=(0.7, 1.3),
+                blend_range=(0.0, 0.15),
+                p=0.5):
+        super().__init__(p=p)
+        self.blur_sigma_range = blur_sigma_range
+        self.strength_range = strength_range
+        self.blend_range = blend_range
+
+    def apply(self, img, **params):
+        orig_dtype = img.dtype
+        img_f = img.astype(np.float32)
+
+        sigma = random.uniform(*self.blur_sigma_range)
+        strength = random.uniform(*self.strength_range)
+        blend = random.uniform(*self.blend_range)
+
+        k = int(sigma * 3) | 1  # odd kernel size derived from sigma
+        k = max(3, k)
+        blurred = cv2.GaussianBlur(img_f, (k, k), sigma)
+
+        # High-pass = original - blurred. Values naturally center around 0,
+        # so we scale by strength and re-center at mid-gray (128) to get a
+        # valid, viewable uint8 image.
+        high_pass = (img_f - blurred) * strength + 128.0
+
+        # Blend a little of the original back in if requested (0 = pure
+        # high-pass).
+        result = high_pass * (1 - blend) + img_f * blend
+        result = np.clip(result, 0, 255).astype(orig_dtype)
+        return result
+
+    def get_transform_init_args_names(self):
+        return ('blur_sigma_range', 'strength_range', 'blend_range')
+
+
 class ImageAugmentation:
     def __init__(self, cfg, key, prob=0.5):
         aug_list = getattr(cfg, key, [])
@@ -158,6 +215,30 @@ class ImageAugmentation:
                                   mean=mean,
                                   p=noise_prob)
 
+        elif aug_type == 'GRAYSCALE':
+            # Converts the image to grayscale (dropping hue/saturation) then
+            # replicates it back to 3 channels, so the model keeps its
+            # normal 3-channel input shape but only ever sees luminance/
+            # contrast for this image - color values can shift a lot
+            # between different times of day (white balance, sodium vs LED
+            # lighting, etc.), so training on some grayscale samples
+            # discourages the model from leaning on color as a cue.
+            # NOTE: this is a training-time-only AUGMENTATION (applied
+            # probabilistically, like BRIGHTNESS/SHADOW/etc.) - it does NOT
+            # change what the deployed car sees at inference. If you later
+            # want the live camera feed to always be grayscale too (a
+            # stronger, permanent form of this same idea), that needs to be
+            # done as a TRANSFORMATIONS entry instead, since only
+            # TRANSFORMATIONS run at inference as well as training.
+            grayscale_prob = getattr(config, 'AUG_GRAYSCALE_PROBABILITY',
+                                     prob)
+            grayscale_method = getattr(config, 'AUG_GRAYSCALE_METHOD',
+                                       'weighted_average')
+            logger.info(f'Creating augmentation {aug_type} '
+                       f'method={grayscale_method} p={grayscale_prob}')
+            return ToGray(num_output_channels=3, method=grayscale_method,
+                          p=grayscale_prob)
+
         elif aug_type == 'SHADOW':
             shadow_prob = getattr(config, 'AUG_SHADOW_PROBABILITY', prob)
             num_shadows_range = getattr(config, 'AUG_SHADOW_COUNT_RANGE',
@@ -176,6 +257,29 @@ class ImageAugmentation:
                                 shadow_roi=shadow_roi,
                                 blur_ksize=blur_ksize,
                                 p=shadow_prob)
+
+        elif aug_type == 'HIGHPASS':
+            # Edge/structure emphasis: subtracts a blurred version of the
+            # image from itself, so flat/smooth regions (overall color and
+            # brightness - the parts that vary a lot across times of day)
+            # collapse toward mid-gray, while edges (lane lines, track
+            # boundaries) stand out. See RandomHighPass docstring for
+            # details. Training on some high-pass images encourages the
+            # model to rely on structure rather than absolute color or
+            # brightness.
+            blur_sigma_range = getattr(config, 'AUG_HIGHPASS_BLUR_SIGMA_RANGE',
+                                       (3.0, 8.0))
+            strength_range = getattr(config, 'AUG_HIGHPASS_STRENGTH_RANGE',
+                                     (0.7, 1.3))
+            blend_range = getattr(config, 'AUG_HIGHPASS_BLEND_RANGE',
+                                  (0.0, 0.15))
+            highpass_prob = getattr(config, 'AUG_HIGHPASS_PROBABILITY', prob)
+            logger.info(f'Creating augmentation {aug_type} '
+                       f'sigma={blur_sigma_range} p={highpass_prob}')
+            return RandomHighPass(blur_sigma_range=blur_sigma_range,
+                                  strength_range=strength_range,
+                                  blend_range=blend_range,
+                                  p=highpass_prob)
 
 
     # Parts interface
